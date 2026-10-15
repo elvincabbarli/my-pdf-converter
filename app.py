@@ -26,23 +26,14 @@ def add_padding_to_image(img, padding_size=40):
 # Veb İnterfeys Dizaynı
 st.title("🖼️ Şəkilləri PDF-ə Çevir")
 st.write(
-    "Şəkilləri yükləyin, sırasını tənzimləyin və kənar boşluqlu PDF əldə edin."
+    "Şəkilləri yükləyin, düymələrdən istifadə edərək sıralarını dəyişin və PDF"
+    " əldə edin."
 )
 
 # Ayarlar (Sidebar)
 st.sidebar.header("⚙️ Ayarlar")
 padding_input = st.sidebar.slider(
     "Kənar boşluq (Padding) ölçüsü:", min_value=0, max_value=100, value=40, step=5
-)
-
-# Sıralama üsulu seçimi
-sort_method = st.sidebar.radio(
-    "Sıralama üsulu:",
-    [
-        "Avtomatik (Adındakı rəqəmə görə)",
-        "Yüklənmə ardıcıllığı",
-        "Əllə nömrələmə (Prioritet)",
-    ],
 )
 
 # Fayl yükləmə komponenti
@@ -53,60 +44,54 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
-  st.success(f"{len(uploaded_files)} şəkil seçildi.")
-
-  # 1. Avtomatik sıralama
-  if sort_method == "Avtomatik (Adındakı rəqəmə görə)":
-    sorted_files = sorted(
+  # Session state-də faylların sırasını saxlayırıq ki, düyməyə basanda yaddan çıxmasın
+  if (
+      "file_order" not in st.session_state
+      or set(st.session_state.file_order) != set(uploaded_files)
+  ):
+    # İlkin olaraq adındakı rəqəmə görə sıralayırıq
+    st.session_state.file_order = sorted(
         uploaded_files, key=lambda x: get_digit_from_name(x.name)
     )
 
-  # 2. Yüklənmə ardıcıllığı
-  elif sort_method == "Yüklənmə ardıcıllığı":
-    sorted_files = uploaded_files
+  st.subheader("📋 Şəkillərin Ardıcıllığı və Dəyişdirilməsi")
+  st.info(
+      "Hər şəklin yanında kiçik önizləməni və `⬆️` / `⬇️` düymələri ilə yeri"
+      " dəyişə bilərsiniz:"
+  )
 
-  # 3. Əllə nömrələmə (İstifadəçi sıra nömrəsi seçir + şəkillərin kiçik önizləməsi)
-  else:
-    st.subheader("🔀 Sıralama və Önizləmə")
-    st.write(
-        "Hər şəklin qarşısındakı rəqəmi dəyişərək ardıcıllığı təyin edin:"
-    )
+  # Hər bir şəkli sətr olaraq göstəririk
+  for i, file in enumerate(st.session_state.file_order):
+    col_img, col_info, col_up, col_down = st.columns([1, 3, 1, 1])
 
-    file_order_dict = {}
+    with col_img:
+      img = Image.open(file)
+      st.image(img, width=70)  # Kiçik önizləmə
 
-    for i, file in enumerate(uploaded_files):
-      col_img, col_name, col_order = st.columns([1, 3, 1])
+    with col_info:
+      st.text(f"Sıra: {i+1}\n{file.name}")
 
-      with col_img:
-        # Kiçik önizləmə şəkli (100px enində)
-        img = Image.open(file)
-        st.image(img, width=100)
+    with col_up:
+      # Əgər ilk şəkil deyilsə, yuxarı qaldırmaq üçün düymə göstər
+      if i > 0:
+        if st.button("⬆️", key=f"up_{file.name}_{i}"):
+          # Yuxarıdakı ilə yeri dəyişirik (Swap)
+          st.session_state.file_order[i], st.session_state.file_order[i - 1] = (
+              st.session_state.file_order[i - 1],
+              st.session_state.file_order[i],
+          )
+          st.rerun()
 
-      with col_name:
-        st.text(f"📷 {file.name}")
-
-      with col_order:
-        # Sıra nömrəsi təyini
-        order_index = st.number_input(
-            "Sıra",
-            min_value=1,
-            max_value=len(uploaded_files),
-            value=i + 1,
-            key=f"order_{file.name}_{i}",
-        )
-        file_order_dict[file] = order_index
-
-    # Seçilmiş sıra nömrələrinə görə faylları sıralayırıq
-    sorted_files = sorted(uploaded_files, key=lambda x: file_order_dict[x])
-
-  # Əgər əllə nömrələmə seçilməyibsə, yekun sıranı göstərən kiçik qalereya
-  if sort_method != "Əllə nömrələmə (Prioritet)":
-    st.subheader("🖼️ Yekun Ardıcıllıq")
-    cols = st.columns(4)  # 4 sütunlu kiçik qalereya
-    for idx, file in enumerate(sorted_files):
-      with cols[idx % 4]:
-        img = Image.open(file)
-        st.image(img, use_container_width=True, caption=f"{idx+1}. {file.name}")
+    with col_down:
+      # Əgər son şəkil deyilsə, aşağı salmaq üçün düymə göstər
+      if i < len(st.session_state.file_order) - 1:
+        if st.button("⬇️", key=f"down_{file.name}_{i}"):
+          # Aşağıdakı ilə yeri dəyişirik (Swap)
+          st.session_state.file_order[i], st.session_state.file_order[i + 1] = (
+              st.session_state.file_order[i + 1],
+              st.session_state.file_order[i],
+          )
+          st.rerun()
 
   st.divider()
 
@@ -114,6 +99,8 @@ if uploaded_files:
   if st.button("🚀 PDF Hazırla"):
     with st.spinner("Şəkillər emal olunur, xahiş edirik gözləyin..."):
       try:
+        sorted_files = st.session_state.file_order
+
         # İlk şəkli hazırlayırıq
         first_img = Image.open(sorted_files[0]).convert("RGB")
         first_img_padded = add_padding_to_image(first_img, padding_input)
